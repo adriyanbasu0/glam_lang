@@ -1,4 +1,4 @@
-# Ox Lang Interpreter
+# Glam Lang Interpreter
 
 This project is an interpreter for the "Ox Lang" programming language. It parses and evaluates `.ox` files.
 

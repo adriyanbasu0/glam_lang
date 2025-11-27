@@ -1,5 +1,5 @@
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub enum Token {
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub enum TokenKind {
     // Keywords
     Fn,     // fn
     Let,    // let
@@ -35,11 +35,30 @@ pub enum Token {
     RBrace,    // }
 
     // Literals
-    Identifier(String),
-    Int(String),
-    String(String),
+    Identifier,
+    Int,
+    String,
 
     // Special
     Eof,
     Illegal,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub struct Token {
+    pub kind: TokenKind,
+    pub literal: String,
+    pub start: usize,
+    pub len: usize,
+}
+
+impl Token {
+    pub fn new(kind: TokenKind, literal: String, start: usize, len: usize) -> Self {
+        Token {
+            kind,
+            literal,
+            start,
+            len,
+        }
+    }
 }

@@ -1,11 +1,10 @@
-use std::fmt;
 use crate::ast::{BlockStatement, Expression, Program, Statement};
-use std::collections::HashMap;
-use std::rc::Rc;
-use std::cell::RefCell;
+use crate::token::TokenKind;
 use rand::Rng;
-
-
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::fmt;
+use std::rc::Rc;
 
 pub const NULL: Object = Object::Null;
 pub const TRUE: Object = Object::Boolean(true);
@@ -34,10 +33,10 @@ pub struct Function {
 impl fmt::Debug for Function {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Function")
-         .field("parameters", &self.parameters)
-         .field("body", &self.body)
-         .field("env", &"// Rc<RefCell<Environment>>") // Placeholder for env
-         .finish()
+            .field("parameters", &self.parameters)
+            .field("body", &self.body)
+            .field("env", &"// Rc<RefCell<Environment>>") // Placeholder for env
+            .finish()
     }
 }
 
@@ -86,7 +85,7 @@ impl fmt::Display for Object {
             Object::Function(func) => {
                 let params: Vec<String> = func.parameters.iter().map(|p| p.value.clone()).collect();
                 write!(f, "fn({}) {{ ... }}", params.join(", "))
-            },
+            }
             Object::Builtin(_) => write!(f, "builtin function"),
             Object::Some(value) => write!(f, "some({})", value),
             Object::Ok => write!(f, "ok"),
@@ -122,12 +121,22 @@ pub fn builtin_rand(args: Vec<Object>) -> Object {
 
     let min = match args[0] {
         Object::Integer(i) => i,
-        _ => return Object::Error(format!("Argument must be an integer, got {}", args[0].type_str())),
+        _ => {
+            return Object::Error(format!(
+                "Argument must be an integer, got {}",
+                args[0].type_str()
+            ));
+        }
     };
 
     let max = match args[1] {
         Object::Integer(i) => i,
-        _ => return Object::Error(format!("Argument must be an integer, got {}", args[1].type_str())),
+        _ => {
+            return Object::Error(format!(
+                "Argument must be an integer, got {}",
+                args[1].type_str()
+            ));
+        }
     };
 
     let mut rng = rand::thread_rng();
@@ -243,7 +252,6 @@ fn eval_statement(statement: Statement, env: Rc<RefCell<Environment>>) -> Object
 }
 
 fn eval_print_statement(expression: Expression, env: Rc<RefCell<Environment>>) -> Object {
-    
     let value = eval_expression(expression, env.clone());
     if is_error(&value) {
         return value;
@@ -322,10 +330,10 @@ fn eval_block_statement(block: BlockStatement, env: Rc<RefCell<Environment>>) ->
 }
 
 fn eval_prefix_expression(operator: crate::token::Token, right: Object) -> Object {
-    match operator {
-        crate::token::Token::Bang => eval_bang_operator_expression(right),
-        crate::token::Token::Minus => eval_minus_operator_expression(right),
-        _ => Object::Error(format!("Unknown operator: {:?}{:?}", operator, right)),
+    match operator.kind {
+        TokenKind::Bang => eval_bang_operator_expression(right),
+        TokenKind::Minus => eval_minus_operator_expression(right),
+        _ => Object::Error(format!("Unknown operator: {:?}{:?}", operator.kind, right)),
     }
 }
 
@@ -355,51 +363,50 @@ fn eval_infix_expression(operator: crate::token::Token, left: Object, right: Obj
             eval_boolean_infix_expression(operator, l_val, r_val)
         }
         (Object::String(l_val), Object::String(r_val)) => {
-            if operator == crate::token::Token::Plus {
+            if operator.kind == TokenKind::Plus {
                 Object::String(format!("{}{}", l_val, r_val))
             } else {
-                Object::Error(format!("Unknown operator: {:?} {:?} {:?}", l_val, operator, r_val))
+                Object::Error(format!(
+                    "Unknown operator: {:?} {:?} {:?}",
+                    l_val, operator.kind, r_val
+                ))
             }
         }
-        (l, r) if l.type_str() != r.type_str() => {
-            Object::Error(format!(
-                "Type mismatch: {:?} {:?} {:?}",
-                l.type_str(),
-                operator,
-                r.type_str()
-            ))
-        }
-        (l, r) => Object::Error(format!("Unknown operator: {:?} {:?} {:?}", l, operator, r)),
+        (l, r) if l.type_str() != r.type_str() => Object::Error(format!(
+            "Type mismatch: {:?} {:?} {:?}",
+            l.type_str(),
+            operator.kind,
+            r.type_str()
+        )),
+        (l, r) => Object::Error(format!("Unknown operator: {:?} {:?} {:?}", l, operator.kind, r)),
     }
 }
 
-fn eval_integer_infix_expression(
-    operator: crate::token::Token,
-    left: i64,
-    right: i64,
-) -> Object {
-    match operator {
-        crate::token::Token::Plus => Object::Integer(left + right),
-        crate::token::Token::Minus => Object::Integer(left - right),
-        crate::token::Token::Asterisk => Object::Integer(left * right),
-        crate::token::Token::Slash => Object::Integer(left / right),
-        crate::token::Token::Lt => native_bool_to_boolean_object(left < right),
-        crate::token::Token::Gt => native_bool_to_boolean_object(left > right),
-        crate::token::Token::Eq => native_bool_to_boolean_object(left == right),
-        crate::token::Token::NotEq => native_bool_to_boolean_object(left != right),
-        _ => Object::Error(format!("Unknown operator: {:?} {:?} {:?}", left, operator, right)),
+fn eval_integer_infix_expression(operator: crate::token::Token, left: i64, right: i64) -> Object {
+    match operator.kind {
+        TokenKind::Plus => Object::Integer(left + right),
+        TokenKind::Minus => Object::Integer(left - right),
+        TokenKind::Asterisk => Object::Integer(left * right),
+        TokenKind::Slash => Object::Integer(left / right),
+        TokenKind::Lt => native_bool_to_boolean_object(left < right),
+        TokenKind::Gt => native_bool_to_boolean_object(left > right),
+        TokenKind::Eq => native_bool_to_boolean_object(left == right),
+        TokenKind::NotEq => native_bool_to_boolean_object(left != right),
+        _ => Object::Error(format!(
+            "Unknown operator: {:?} {:?} {:?}",
+            left, operator.kind, right
+        )),
     }
 }
 
-fn eval_boolean_infix_expression(
-    operator: crate::token::Token,
-    left: bool,
-    right: bool,
-) -> Object {
-    match operator {
-        crate::token::Token::Eq => native_bool_to_boolean_object(left == right),
-        crate::token::Token::NotEq => native_bool_to_boolean_object(left != right),
-        _ => Object::Error(format!("Unknown operator: {:?} {:?} {:?}", left, operator, right)),
+fn eval_boolean_infix_expression(operator: crate::token::Token, left: bool, right: bool) -> Object {
+    match operator.kind {
+        TokenKind::Eq => native_bool_to_boolean_object(left == right),
+        TokenKind::NotEq => native_bool_to_boolean_object(left != right),
+        _ => Object::Error(format!(
+            "Unknown operator: {:?} {:?} {:?}",
+            left, operator.kind, right
+        )),
     }
 }
 
@@ -425,7 +432,9 @@ fn apply_function(func: Object, args: Vec<Object>) -> Object {
                     return arg.clone();
                 }
             }
-            let extended_env = Rc::new(RefCell::new(Environment::new_enclosed_environment(function.env.clone())));
+            let extended_env = Rc::new(RefCell::new(Environment::new_enclosed_environment(
+                function.env.clone(),
+            )));
             for (param_ident, arg_obj) in function.parameters.into_iter().zip(args.into_iter()) {
                 extended_env.borrow_mut().set(param_ident.value, arg_obj);
             }
@@ -446,11 +455,7 @@ fn unwrap_return_value(obj: Object) -> Object {
 }
 
 fn native_bool_to_boolean_object(input: bool) -> Object {
-    if input {
-        TRUE
-    } else {
-        FALSE
-    }
+    if input { TRUE } else { FALSE }
 }
 
 fn is_error(obj: &Object) -> bool {

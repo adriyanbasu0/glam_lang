@@ -1,4 +1,4 @@
-use crate::token::Token;
+use crate::token::{Token, TokenKind};
 
 pub struct Lexer {
     input: String,
@@ -33,84 +33,92 @@ impl Lexer {
         self.skip_whitespace();
         self.skip_comments(); // Skip comments after skipping whitespace
 
-        let token = match self.ch {
+        let current_token_start_pos = self.position;
+        let (kind, literal) = match self.ch {
             '=' => {
                 if self.peek_char() == '=' {
                     self.read_char(); // consume the second '='
-                    Token::Eq
+                    (TokenKind::Eq, "==".to_string())
                 } else {
-                    Token::Assign
+                    (TokenKind::Assign, "=".to_string())
                 }
             }
-            '+' => Token::Plus,
-            '-' => Token::Minus,
-            '*' => Token::Asterisk,
+            '+' => (TokenKind::Plus, "+".to_string()),
+            '-' => (TokenKind::Minus, "-".to_string()),
+            '*' => (TokenKind::Asterisk, "*".to_string()),
             '/' => {
                 if self.peek_char() == '/' {
                     // This case should be handled by skip_comments, but just in case
                     self.skip_comments();
                     return self.next_token(); // Get the next actual token
                 }
-                Token::Slash
+                (TokenKind::Slash, "/".to_string())
             }
             '!' => {
                 if self.peek_char() == '=' {
                     self.read_char(); // consume the '='
-                    Token::NotEq
+                    (TokenKind::NotEq, "!=".to_string())
                 } else {
-                    Token::Bang
+                    (TokenKind::Bang, "!".to_string())
                 }
             }
             '<' => {
                 if self.peek_char() == '=' {
                     self.read_char(); // consume the '='
-                    Token::LtEq
+                    (TokenKind::LtEq, "<=".to_string())
                 } else {
-                    Token::Lt
+                    (TokenKind::Lt, "<".to_string())
                 }
             }
             '>' => {
                 if self.peek_char() == '=' {
                     self.read_char(); // consume the '='
-                    Token::GtEq
+                    (TokenKind::GtEq, ">=".to_string())
                 } else {
-                    Token::Gt
+                    (TokenKind::Gt, ">".to_string())
                 }
             }
-            ',' => Token::Comma,
-            ';' => Token::Semicolon,
-            '(' => Token::LParen,
-            ')' => Token::RParen,
-            '{' => Token::LBrace,
-            '}' => Token::RBrace,
-            '"' => self.read_string(),
-            '\0' => Token::Eof,
+            ',' => (TokenKind::Comma, ",".to_string()),
+            ';' => (TokenKind::Semicolon, ";".to_string()),
+            '(' => (TokenKind::LParen, "(".to_string()),
+            ')' => (TokenKind::RParen, ")".to_string()),
+            '{' => (TokenKind::LBrace, "{".to_string()),
+            '}' => (TokenKind::RBrace, "}".to_string()),
+            '"' => {
+                self.read_char(); // consume the opening quote
+                let (literal, kind) = self.read_string_literal();
+                self.read_char(); // consume the closing quote or advance
+                return Token::new(kind, literal, current_token_start_pos, self.position - current_token_start_pos);
+            }
+            '\0' => (TokenKind::Eof, "".to_string()),
             _ => {
                 if is_letter(self.ch) {
                     let literal = self.read_identifier();
-                    return match literal.as_str() {
-                        "fn" => Token::Fn,
-                        "let" => Token::Let,
-                        "mut" => Token::Mut,
-                        "if" => Token::If,
-                        "else" => Token::Else,
-                        "return" => Token::Return,
-                        "true" => Token::True,
-                        "false" => Token::False,
-                        "null" => Token::Null,
-                        "print" => Token::Print,
-                        _ => Token::Identifier(literal),
+                    let kind = match literal.as_str() {
+                        "fn" => TokenKind::Fn,
+                        "let" => TokenKind::Let,
+                        "mut" => TokenKind::Mut,
+                        "if" => TokenKind::If,
+                        "else" => TokenKind::Else,
+                        "return" => TokenKind::Return,
+                        "true" => TokenKind::True,
+                        "false" => TokenKind::False,
+                        "null" => TokenKind::Null,
+                        "print" => TokenKind::Print,
+                        _ => TokenKind::Identifier,
                     };
+                    return Token::new(kind, literal, current_token_start_pos, self.position - current_token_start_pos);
                 } else if is_digit(self.ch) {
-                    return Token::Int(self.read_number());
+                    let literal = self.read_number();
+                    return Token::new(TokenKind::Int, literal, current_token_start_pos, self.position - current_token_start_pos);
                 } else {
-                    Token::Illegal
+                    (TokenKind::Illegal, self.ch.to_string())
                 }
             }
         };
 
         self.read_char();
-        token
+        Token::new(kind, literal, current_token_start_pos, self.position - current_token_start_pos)
     }
 
     fn read_identifier(&mut self) -> String {
@@ -129,19 +137,18 @@ impl Lexer {
         self.input[position..self.position].to_string()
     }
 
-    fn read_string(&mut self) -> Token {
-        let position = self.position + 1; // skip the opening quote
-        self.read_char(); // move past the opening quote
+    fn read_string_literal(&mut self) -> (String, TokenKind) {
+        let position = self.position;
         while self.ch != '"' && self.ch != '\0' {
             self.read_char();
         }
 
         if self.ch == '\0' {
-            return Token::Illegal; // Unterminated string
+            // Unterminated string
+            (self.input[position..self.position].to_string(), TokenKind::Illegal)
+        } else {
+            (self.input[position..self.position].to_string(), TokenKind::String)
         }
-
-        let literal = self.input[position..self.position].to_string();
-        Token::String(literal)
     }
 
     fn skip_whitespace(&mut self) {
