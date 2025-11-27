@@ -1,3 +1,4 @@
+use crate::OxError;
 use crate::ast::{
     BlockStatement, Boolean, CallExpression, Expression, ExpressionStatement, Identifier,
     InfixExpression, IntLiteral, LetStatement, PrefixExpression, Program, ReturnStatement,
@@ -5,9 +6,8 @@ use crate::ast::{
 };
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenKind};
-use std::collections::HashMap;
 use miette::SourceSpan; // Needed for ParserError
-use crate::OxError; // ADDED HERE
+use std::collections::HashMap; // ADDED HERE
 
 // Operator precedence
 #[derive(PartialEq, PartialOrd, Debug, Clone, Copy)]
@@ -78,7 +78,13 @@ impl Parser {
 
     fn next_token(&mut self) {
         self.current_token = self.peek_token.clone();
-        self.peek_token = self.lexer.next_token();
+        match self.lexer.next_token() {
+            Ok(token) => self.peek_token = token,
+            Err(e) => {
+                self.errors.push(e.into());
+                self.peek_token = Token::new(TokenKind::Eof, "".to_string(), 0, 0); // Set to EOF on error to prevent infinite loop
+            }
+        }
     }
 
     pub fn parse_program(&mut self) -> Program {
@@ -137,10 +143,14 @@ impl Parser {
         }
 
         let name = match self.current_token.kind {
-            TokenKind::Identifier => Identifier { value: self.current_token.literal.clone() },
+            TokenKind::Identifier => Identifier {
+                value: self.current_token.literal.clone(),
+            },
             _ => {
-                self.errors
-                    .push(OxError::ParserError(format!("Expected identifier, got {:?}", self.current_token.kind)));
+                self.errors.push(OxError::ParserError(format!(
+                    "Expected identifier, got {:?}",
+                    self.current_token.kind
+                )));
                 return None;
             }
         };
@@ -184,8 +194,6 @@ impl Parser {
         Some(Statement::Expression(stmt))
     }
 
-
-
     fn parse_expression(&mut self, precedence: Precedence) -> Option<Expression> {
         let current_token_kind = self.current_token.kind.clone();
         let prefix_parser = self.prefix_parse_fns.get(&current_token_kind).cloned();
@@ -212,14 +220,18 @@ impl Parser {
 
     fn parse_identifier(p: &mut Parser) -> Option<Expression> {
         match p.current_token.kind {
-            TokenKind::Identifier => Some(Expression::Identifier(Identifier { value: p.current_token.literal.clone() })),
+            TokenKind::Identifier => Some(Expression::Identifier(Identifier {
+                value: p.current_token.literal.clone(),
+            })),
             _ => None,
         }
     }
 
     fn parse_integer_literal(p: &mut Parser) -> Option<Expression> {
         match p.current_token.kind {
-            TokenKind::Int => p.current_token.literal
+            TokenKind::Int => p
+                .current_token
+                .literal
                 .parse::<i64>()
                 .ok()
                 .map(|val| Expression::IntLiteral(IntLiteral { value: val })),
@@ -247,7 +259,6 @@ impl Parser {
     fn parse_null_literal(_p: &mut Parser) -> Option<Expression> {
         Some(Expression::Null)
     }
-
 
     fn parse_prefix_expression(p: &mut Parser) -> Option<Expression> {
         let operator_token = p.current_token.clone(); // Store the whole token
@@ -333,10 +344,14 @@ impl Parser {
 
         self.next_token(); // Advance past '(' or ','
         if let TokenKind::Identifier = self.current_token.kind {
-            identifiers.push(Identifier { value: self.current_token.literal.clone() });
+            identifiers.push(Identifier {
+                value: self.current_token.literal.clone(),
+            });
         } else {
-            self.errors
-                .push(OxError::ParserError(format!("Expected identifier, got {:?}", self.current_token.kind)));
+            self.errors.push(OxError::ParserError(format!(
+                "Expected identifier, got {:?}",
+                self.current_token.kind
+            )));
             return None;
         } // ADDED THIS CLOSING BRACE
 
@@ -344,10 +359,14 @@ impl Parser {
             self.next_token(); // Consume ','
             self.next_token(); // Advance to next identifier
             if let TokenKind::Identifier = self.current_token.kind {
-                identifiers.push(Identifier { value: self.current_token.literal.clone() });
+                identifiers.push(Identifier {
+                    value: self.current_token.literal.clone(),
+                });
             } else {
-                self.errors
-                    .push(OxError::ParserError(format!("Expected identifier, got {:?}", self.current_token.kind)));
+                self.errors.push(OxError::ParserError(format!(
+                    "Expected identifier, got {:?}",
+                    self.current_token.kind
+                )));
                 return None;
             }
         }
@@ -502,8 +521,10 @@ mod tests {
         let program = p.parse_program();
 
         if !p.errors.is_empty() {
+            // For testing, we create a dummy NamedSource for miette
+            let source = miette::NamedSource::new("test_input.ox".to_string(), input.to_string());
             for err in &p.errors {
-                eprintln!("Parser error: {}", err);
+                eprintln!("Parser error: {:?}", miette::Report::new(err.clone()).with_source_code(source.clone()));
             }
             panic!("Parser had errors: {:?}", p.errors);
         }

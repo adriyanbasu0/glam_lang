@@ -1,4 +1,6 @@
 use crate::token::{Token, TokenKind};
+use miette::Diagnostic;
+use thiserror::Error;
 
 pub struct Lexer {
     input: String,
@@ -7,9 +9,31 @@ pub struct Lexer {
     ch: char,             // current char under examination
 }
 
+#[derive(Error, Diagnostic, Debug)]
+pub enum LexerError {
+    #[error("Unterminated string")]
+    #[diagnostic(
+        code(lexer::unterminated_string),
+        help("Add a closing '\"' to the string literal.")
+    )]
+    UnterminatedString {
+        #[label("This string is not terminated")]
+        span: miette::SourceSpan,
+    },
+    #[error("Illegal character: '{found}'")]
+    #[diagnostic(
+        code(lexer::illegal_character),
+        help("Remove or replace this character with a valid one.")
+    )]
+    IllegalCharacter {
+        found: char,
+        #[label("Illegal character")]
+        span: miette::SourceSpan,
+    },
+}
+
 impl Lexer {
-    pub fn new(input: String) -> Self {
-        let mut lexer = Lexer {
+    pub fn new(input: String) -> Self {        let mut lexer = Lexer {
             input,
             position: 0,
             read_position: 0,
@@ -29,7 +53,7 @@ impl Lexer {
         self.read_position += 1;
     }
 
-    pub fn next_token(&mut self) -> Token {
+    pub fn next_token(&mut self) -> Result<Token, LexerError> {
         self.skip_whitespace();
         self.skip_comments(); // Skip comments after skipping whitespace
 
@@ -86,9 +110,9 @@ impl Lexer {
             '}' => (TokenKind::RBrace, "}".to_string()),
             '"' => {
                 self.read_char(); // consume the opening quote
-                let (literal, kind) = self.read_string_literal();
+                let (literal, kind) = self.read_string_literal()?;
                 self.read_char(); // consume the closing quote or advance
-                return Token::new(kind, literal, current_token_start_pos, self.position - current_token_start_pos);
+                return Ok(Token::new(kind, literal, current_token_start_pos, self.position - current_token_start_pos));
             }
             '\0' => (TokenKind::Eof, "".to_string()),
             _ => {
@@ -107,18 +131,21 @@ impl Lexer {
                         "print" => TokenKind::Print,
                         _ => TokenKind::Identifier,
                     };
-                    return Token::new(kind, literal, current_token_start_pos, self.position - current_token_start_pos);
+                    return Ok(Token::new(kind, literal, current_token_start_pos, self.position - current_token_start_pos));
                 } else if is_digit(self.ch) {
                     let literal = self.read_number();
-                    return Token::new(TokenKind::Int, literal, current_token_start_pos, self.position - current_token_start_pos);
+                    return Ok(Token::new(TokenKind::Int, literal, current_token_start_pos, self.position - current_token_start_pos));
                 } else {
-                    (TokenKind::Illegal, self.ch.to_string())
+                    return Err(LexerError::IllegalCharacter {
+                        found: self.ch,
+                        span: miette::SourceSpan::new(current_token_start_pos.into(), 1usize.into()),
+                    });
                 }
             }
         };
 
         self.read_char();
-        Token::new(kind, literal, current_token_start_pos, self.position - current_token_start_pos)
+        Ok(Token::new(kind, literal, current_token_start_pos, self.position - current_token_start_pos))
     }
 
     fn read_identifier(&mut self) -> String {
@@ -137,17 +164,18 @@ impl Lexer {
         self.input[position..self.position].to_string()
     }
 
-    fn read_string_literal(&mut self) -> (String, TokenKind) {
+    fn read_string_literal(&mut self) -> Result<(String, TokenKind), LexerError> {
         let position = self.position;
         while self.ch != '"' && self.ch != '\0' {
             self.read_char();
         }
 
         if self.ch == '\0' {
-            // Unterminated string
-            (self.input[position..self.position].to_string(), TokenKind::Illegal)
+            Err(LexerError::UnterminatedString {
+                span: miette::SourceSpan::new(position.into(), (self.position - position).into()),
+            })
         } else {
-            (self.input[position..self.position].to_string(), TokenKind::String)
+            Ok((self.input[position..self.position].to_string(), TokenKind::String))
         }
     }
 

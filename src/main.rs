@@ -1,4 +1,4 @@
-use miette::{Diagnostic, IntoDiagnostic, Result, miette};
+use miette::{Diagnostic, IntoDiagnostic, Result};
 use thiserror::Error;
 
 #[derive(Error, Diagnostic, Debug)]
@@ -18,6 +18,12 @@ pub enum OxError {
         #[label("Here")]
         span: miette::SourceSpan,
     },
+    #[error(transparent)]
+    #[diagnostic(code(ox_lang::eval_error))]
+    EvalError(#[from] evaluator::EvalError),
+    #[error(transparent)]
+    #[diagnostic(code(ox_lang::lexer_error))]
+    LexerError(#[from] lexer::LexerError),
 }
 
 mod ast;
@@ -57,8 +63,8 @@ fn main() -> Result<()> {
     let mut env = Rc::new(RefCell::new(Environment::new(Rc::new(RefCell::new(
         io::stdout(),
     )))));
-    let evaluated = eval(program, &mut env);
+    let evaluated = eval(program, &mut env)?;
 
-    println!("Evaluated result: {:#?}", evaluated);
+    println!("Evaluated result: {}", evaluated);
     Ok(())
 }
