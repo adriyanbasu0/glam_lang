@@ -33,7 +33,7 @@ mod parser;
 mod token;
 
 use crate::evaluator::{Environment, eval};
-use crate::lexer::Lexer;
+// use crate::lexer::Lexer;
 use crate::parser::Parser;
 use std::cell::RefCell;
 use std::fs;

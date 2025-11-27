@@ -1,6 +1,6 @@
 # Glam Lang Interpreter
 
-This project is an interpreter for the "Ox Lang" programming language. It parses and evaluates `.ox` files.
+This project is an interpreter for the "Ox Lang" programming language. It parses and evaluates `.lm` files.
 
 ## Building the Project
 
@@ -14,7 +14,7 @@ cargo build
 
 ## Running the Interpreter
 
-The interpreter can be run using `cargo run`. By default, it will execute the `main.ox` file.
+The interpreter can be run using `cargo run`. By default, it will execute the `main.lm` file.
 
 ```bash
 cargo run
