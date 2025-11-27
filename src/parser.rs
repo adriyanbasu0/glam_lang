@@ -86,8 +86,12 @@ impl Parser {
             let statement = self.parse_statement();
             if let Some(stmt) = statement {
                 program.statements.push(stmt);
+            } else {
+                // If parse_statement returns None, it means the current token was not
+                // part of a recognized statement. We should advance past it to avoid
+                // an infinite loop on an unrecognized token.
+                self.next_token();
             }
-            self.next_token();
         }
 
         program
