@@ -108,6 +108,8 @@ impl Lexer {
             ')' => (TokenKind::RParen, ")".to_string()),
             '{' => (TokenKind::LBrace, "{".to_string()),
             '}' => (TokenKind::RBrace, "}".to_string()),
+            ':' => (TokenKind::Colon, ":".to_string()),
+            '.' => (TokenKind::Dot, ".".to_string()),
             '"' => {
                 self.read_char(); // consume the opening quote
                 let (literal, kind) = self.read_string_literal()?;
@@ -129,6 +131,7 @@ impl Lexer {
                         "false" => TokenKind::False,
                         "null" => TokenKind::Null,
                         "print" => TokenKind::Print,
+                        "struct" => TokenKind::Struct,
                         _ => TokenKind::Identifier,
                     };
                     return Ok(Token::new(kind, literal, current_token_start_pos, self.position - current_token_start_pos));

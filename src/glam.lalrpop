@@ -20,12 +20,15 @@ extern {
         Else => Token { kind: TokenKind::Else, .. },
         Fn => Token { kind: TokenKind::Fn, .. },
         Return => Token { kind: TokenKind::Return, .. },
+        Struct => Token { kind: TokenKind::Struct, .. },
         LBrace => Token { kind: TokenKind::LBrace, .. },
         RBrace => Token { kind: TokenKind::RBrace, .. },
         Bang => Token { kind: TokenKind::Bang, .. },
         Assign => Token { kind: TokenKind::Assign, .. },
         Semicolon => Token { kind: TokenKind::Semicolon, .. },
         Comma => Token { kind: TokenKind::Comma, .. },
+        Colon => Token { kind: TokenKind::Colon, .. },
+        Dot => Token { kind: TokenKind::Dot, .. },
         Plus => Token { kind: TokenKind::Plus, .. },
         Minus => Token { kind: TokenKind::Minus, .. },
         Asterisk => Token { kind: TokenKind::Asterisk, .. },
@@ -44,6 +47,7 @@ pub Program: ast::Program = {
 };
 
 Statement: ast::Statement = {
+    StructDefinitionStatement,
     LetStatement,
     ReturnStatement,
     PrintStatement,
@@ -151,6 +155,18 @@ Call: ast::Expression = {
             arguments: args,
         })
     },
+    AccessExpressionChain,
+};
+
+AccessExpressionChain: ast::Expression = {
+    <base:AccessExpressionChain> Dot <field:Ident> => ast::Expression::Access(ast::AccessExpression {
+        object: Box::new(base),
+        field: field,
+    }),
+    AtomicExpression,
+};
+
+AtomicExpression: ast::Expression = {
     Term,
 };
 
@@ -173,6 +189,29 @@ Term: ast::Expression = {
         })
     },
     LParen <e:Expression> RParen => e,
+    StructInstance,
+};
+
+StructInstance: ast::Expression = {
+    <name:Ident> LBrace <fields:StructInstanceFieldList> RBrace => ast::Expression::StructInstance(ast::StructInstanceExpression {
+        struct_name: name,
+        fields: fields,
+    })
+};
+
+StructInstanceFieldList: Vec<(ast::Identifier, ast::Expression)> = {
+    <v:(<StructInstanceField> Comma)*> <e:StructInstanceField?> => match e {
+        None => v,
+        Some(e) => {
+            let mut v = v;
+            v.push(e);
+            v
+        }
+    }
+};
+
+StructInstanceField: (ast::Identifier, ast::Expression) = {
+    <name:Ident> Colon <value:Expression> => (name, value)
 };
 
 ElseClause: ast::BlockStatement = {
@@ -192,4 +231,26 @@ CommaList<T>: Vec<T> = {
 
 Ident: ast::Identifier = {
     <token:Identifier> => ast::Identifier { value: token.literal.clone() }
+};
+
+StructDefinitionStatement: ast::Statement = {
+    Struct <name:Ident> LBrace <fields:StructFieldList> RBrace => ast::Statement::Struct(ast::StructDefinition {
+        name: name,
+        fields: fields,
+    })
+};
+
+StructFieldList: Vec<ast::StructField> = {
+    <v:(<StructField> Comma)*> <e:StructField?> => match e {
+        None => v,
+        Some(e) => {
+            let mut v = v;
+            v.push(e);
+            v
+        }
+    }
+};
+
+StructField: ast::StructField = {
+    <name:Ident> Colon <field_type:Ident> => ast::StructField { name: name, field_type: field_type }
 };

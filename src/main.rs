@@ -59,7 +59,7 @@ fn main() -> Result<()> {
             // For now, let's just print the error and exit.
             eprintln!("Parser error: {}", e);
             // We can't easily get a span from the LALRPOP error without more work.
-            // We will just create a generic error.
+            // We will just create a generic error for now.
             return Err(miette::Report::new(OxError::ParserError(e)).with_source_code(source));
         }
     };

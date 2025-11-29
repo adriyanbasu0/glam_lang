@@ -4,16 +4,16 @@ use crate::lexer::Lexer;
 use crate::token::Token;
 
 // The lalrpop macro generates a module named `ox`.
-lalrpop_mod!(pub ox);
+lalrpop_mod!(pub glam);
 
 pub struct Parser {
-    parser: ox::ProgramParser,
+    parser: glam::ProgramParser,
 }
 
 impl Parser {
     pub fn new() -> Self {
         Parser {
-            parser: ox::ProgramParser::new(),
+            parser: glam::ProgramParser::new(),
         }
     }
 

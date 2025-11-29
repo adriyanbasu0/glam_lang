@@ -62,3 +62,20 @@ let factorial = fn(n) {
 let fact_5 = factorial(5);
 print "Factorial of 5: ";
 print fact_5; // Should print 120
+
+// Struct definition
+struct Point {
+    x: int,
+    y: int
+}
+print "Defined struct Point: ";
+print Point;
+
+// Struct instantiation and field access
+let p = Point { x: 10, y: 20 };
+print "Instantiated Point: ";
+print p;
+print "p.x: ";
+print p.x;
+print "p.y: ";
+print p.y;

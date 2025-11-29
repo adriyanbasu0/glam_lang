@@ -11,6 +11,7 @@ pub enum TokenKind {
     False,  // false
     Null,   // null
     Print,  // print (for a simple print function)
+    Struct, // struct
 
     // Operators
     Assign,   // =
@@ -29,6 +30,8 @@ pub enum TokenKind {
     // Delimiters
     Comma,     // ,
     Semicolon, // ;
+    Colon,     // :
+    Dot,       // .
     LParen,    // (
     RParen,    // )
     LBrace,    // {

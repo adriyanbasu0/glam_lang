@@ -97,6 +97,8 @@ pub enum Object {
     Builtin(fn(Vec<Object>) -> Result<Object, EvalError>),
     Some(Box<Object>),
     Ok,
+    Struct(Rc<crate::ast::StructDefinition>),
+    StructInstance(HashMap<String, Object>),
     Null,
 }
 
@@ -145,6 +147,8 @@ impl Object {
             Object::Builtin(_) => "BUILTIN",
             Object::Some(_) => "SOME",
             Object::Ok => "OK",
+            Object::Struct(_) => "STRUCT",
+            Object::StructInstance(_) => "STRUCT_INSTANCE",
             Object::Null => "NULL",
         }
     }
@@ -164,6 +168,14 @@ impl fmt::Display for Object {
             Object::Builtin(_) => write!(f, "builtin function"),
             Object::Some(value) => write!(f, "some({})", value),
             Object::Ok => write!(f, "ok"),
+            Object::Struct(s) => {
+                let fields: Vec<String> = s.fields.iter().map(|field| format!("{}: {}", field.name.value, field.field_type.value)).collect();
+                write!(f, "struct {} {{ {} }}", s.name.value, fields.join(", "))
+            },
+            Object::StructInstance(fields) => {
+                let field_strings: Vec<String> = fields.iter().map(|(name, value)| format!("{}: {}", name, value)).collect();
+                write!(f, "{{ {} }}", field_strings.join(", "))
+            },
             Object::Null => write!(f, "null"),
         }
     }
@@ -313,6 +325,12 @@ fn eval_statement(
             Ok(env.borrow_mut().set(let_stmt.name.value, val))
         }
         Statement::Print(print_stmt) => eval_print_statement(print_stmt.expression, env),
+        Statement::Struct(struct_def) => {
+            let name = struct_def.name.value.clone();
+            let struct_obj = Object::Struct(Rc::new(struct_def));
+            env.borrow_mut().set(name, struct_obj);
+            Ok(NULL)
+        }
     }
 }
 
@@ -366,6 +384,52 @@ fn eval_expression(
             let function = eval_expression(*call_exp.function, env.clone())?;
             let args = eval_expressions(call_exp.arguments, env)?;
             apply_function(function, args)
+        },
+        Expression::Access(access_exp) => {
+            let object = eval_expression(*access_exp.object, env.clone())?;
+            match object {
+                Object::StructInstance(fields) => {
+                    if let Some(field_value) = fields.get(&access_exp.field.value) {
+                        Ok(field_value.clone())
+                    } else {
+                        Err(EvalError::RuntimeError {
+                            message: format!("Field '{}' not found in struct instance", access_exp.field.value),
+                        })
+                    }
+                },
+                _ => Err(EvalError::RuntimeError {
+                    message: format!("Cannot access fields on non-struct object of type {}", object.type_str()),
+                }),
+            }
+        },
+        Expression::StructInstance(struct_instance_exp) => {
+            let struct_def_name = struct_instance_exp.struct_name.value;
+            let struct_obj = env.borrow().get(&struct_def_name);
+
+            if let Some(Object::Struct(struct_def_rc)) = struct_obj { // struct_def_rc is Rc<ast::StructDefinition>
+                let mut instance_fields: HashMap<String, Object> = HashMap::new();
+
+                for (field_name_ident, field_value_expr) in struct_instance_exp.fields {
+                    // Check if field_name_ident exists in struct_def_rc.fields
+                    let field_exists_in_def = struct_def_rc.fields.iter()
+                        .any(|f_def| f_def.name.value == field_name_ident.value);
+
+                    if !field_exists_in_def {
+                        return Err(EvalError::RuntimeError {
+                            message: format!("Field '{}' not found in struct '{}'",
+                                field_name_ident.value, struct_def_name),
+                        });
+                    }
+
+                    let field_value = eval_expression(field_value_expr, env.clone())?;
+                    instance_fields.insert(field_name_ident.value, field_value);
+                }
+                Ok(Object::StructInstance(instance_fields))
+            } else {
+                Err(EvalError::RuntimeError {
+                    message: format!("Struct '{}' not defined", struct_def_name),
+                })
+            }
         }
     }
 }

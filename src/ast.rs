@@ -6,6 +6,19 @@ pub enum Statement {
     Return(ReturnStatement),
     Expression(ExpressionStatement),
     Print(PrintStatement), // Added PrintStatement
+    Struct(StructDefinition),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct StructDefinition {
+    pub name: Identifier,
+    pub fields: Vec<StructField>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct StructField {
+    pub name: Identifier,
+    pub field_type: Identifier, // For now, types are just identifiers
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -40,7 +53,21 @@ pub enum Expression {
     If(IfExpression),
     Function(FunctionLiteral),
     Call(CallExpression),
+    Access(AccessExpression),
+    StructInstance(StructInstanceExpression),
     Null,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct AccessExpression {
+    pub object: Box<Expression>,
+    pub field: Identifier,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct StructInstanceExpression {
+    pub struct_name: Identifier,
+    pub fields: Vec<(Identifier, Expression)>, // (field_name, field_value)
 }
 
 #[derive(Debug, PartialEq, Clone)]
