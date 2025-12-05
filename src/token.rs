@@ -12,6 +12,8 @@ pub enum TokenKind {
     Null,   // null
     Print,  // print (for a simple print function)
     Struct, // struct
+    For,    // for
+    In,     // in
 
     // Operators
     Assign,   // =
@@ -36,10 +38,13 @@ pub enum TokenKind {
     RParen,    // )
     LBrace,    // {
     RBrace,    // }
+    LBracket,  // [
+    RBracket,  // ]
 
     // Literals
     Identifier,
     Int,
+    Float,
     String,
 
     // Special

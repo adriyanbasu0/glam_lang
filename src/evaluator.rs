@@ -85,11 +85,18 @@ pub enum EvalError {
         help("A runtime error occurred during evaluation.")
     )]
     RuntimeError { message: String },
+    #[error("Index out of bounds: index {index} on array of size {size}")]
+    #[diagnostic(
+        code(evaluator::index_out_of_bounds),
+        help("Attempted to access an array element outside its valid range.")
+    )]
+    IndexOutOfBounds { index: i64, size: usize },
 }
 
 #[derive(Debug, Clone)]
 pub enum Object {
     Integer(i64),
+    Float(f64),
     Boolean(bool),
     String(String),
     Return(Box<Object>),
@@ -99,6 +106,7 @@ pub enum Object {
     Ok,
     Struct(Rc<crate::ast::StructDefinition>),
     StructInstance(HashMap<String, Object>),
+    Array(Vec<Object>),
     Null,
 }
 
@@ -140,6 +148,7 @@ impl Object {
     pub fn type_str(&self) -> &str {
         match self {
             Object::Integer(_) => "INTEGER",
+            Object::Float(_) => "FLOAT",
             Object::Boolean(_) => "BOOLEAN",
             Object::String(_) => "STRING",
             Object::Return(_) => "RETURN_VALUE",
@@ -149,6 +158,7 @@ impl Object {
             Object::Ok => "OK",
             Object::Struct(_) => "STRUCT",
             Object::StructInstance(_) => "STRUCT_INSTANCE",
+            Object::Array(_) => "ARRAY",
             Object::Null => "NULL",
         }
     }
@@ -158,6 +168,7 @@ impl fmt::Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Object::Integer(value) => write!(f, "{}", value),
+            Object::Float(value) => write!(f, "{}", value),
             Object::Boolean(value) => write!(f, "{}", value),
             Object::String(value) => write!(f, "{}", value),
             Object::Return(value) => write!(f, "{}", value),
@@ -175,6 +186,10 @@ impl fmt::Display for Object {
             Object::StructInstance(fields) => {
                 let field_strings: Vec<String> = fields.iter().map(|(name, value)| format!("{}: {}", name, value)).collect();
                 write!(f, "{{ {} }}", field_strings.join(", "))
+            },
+            Object::Array(elements) => {
+                let element_strings: Vec<String> = elements.iter().map(|e| format!("{}", e)).collect();
+                write!(f, "[{}]", element_strings.join(", "))
             },
             Object::Null => write!(f, "null"),
         }
@@ -293,9 +308,19 @@ impl Environment {
         }
     }
 
-    pub fn set(&mut self, name: String, val: Object) -> Object {
-        self.store.insert(name, val.clone());
-        val
+    pub fn define(&mut self, name: String, val: Object) {
+        self.store.insert(name, val);
+    }
+
+    pub fn set(&mut self, name: &str, val: Object) -> Option<Object> {
+        if self.store.contains_key(name) {
+            self.store.insert(name.to_string(), val.clone());
+            return Some(val);
+        }
+        if let Some(outer) = &self.outer {
+            return outer.borrow_mut().set(name, val);
+        }
+        None
     }
 }
 
@@ -322,14 +347,35 @@ fn eval_statement(
         }
         Statement::Let(let_stmt) => {
             let val = eval_expression(let_stmt.value, env.clone())?;
-            Ok(env.borrow_mut().set(let_stmt.name.value, val))
+            env.borrow_mut().define(let_stmt.name.value, val);
+            Ok(NULL)
         }
         Statement::Print(print_stmt) => eval_print_statement(print_stmt.expression, env),
         Statement::Struct(struct_def) => {
             let name = struct_def.name.value.clone();
             let struct_obj = Object::Struct(Rc::new(struct_def));
-            env.borrow_mut().set(name, struct_obj);
+            env.borrow_mut().define(name, struct_obj);
             Ok(NULL)
+        },
+        Statement::For(for_stmt) => {
+            let iterable = eval_expression(for_stmt.iterable, env.clone())?;
+            match iterable {
+                Object::Array(elements) => {
+                    let mut result = NULL;
+                    for element in elements {
+                        let loop_env = Rc::new(RefCell::new(Environment::new_enclosed_environment(env.clone())));
+                        loop_env.borrow_mut().define(for_stmt.iterator_var.value.clone(), element);
+                        result = eval_block_statement(for_stmt.body.clone(), loop_env)?;
+                        if let Object::Return(_) = result {
+                            return Ok(result);
+                        }
+                    }
+                    Ok(result)
+                },
+                _ => Err(EvalError::RuntimeError {
+                    message: format!("For loop can only iterate over arrays, got {}", iterable.type_str()),
+                }),
+            }
         }
     }
 }
@@ -352,6 +398,7 @@ fn eval_expression(
 ) -> Result<Object, EvalError> {
     match expression {
         Expression::IntLiteral(int) => Ok(Object::Integer(int.value)),
+        Expression::FloatLiteral(float) => Ok(Object::Float(float.value)),
         Expression::Boolean(boolean) => Ok(native_bool_to_boolean_object(boolean.value)),
         Expression::StringLiteral(s) => Ok(Object::String(s.value)),
         Expression::Null => Ok(NULL),
@@ -430,6 +477,37 @@ fn eval_expression(
                     message: format!("Struct '{}' not defined", struct_def_name),
                 })
             }
+        },
+        Expression::ArrayLiteral(array_lit) => {
+            let elements = eval_expressions(array_lit.elements, env)?;
+            Ok(Object::Array(elements))
+        },
+        Expression::IndexExpression(index_exp) => {
+            let object = eval_expression(*index_exp.object, env.clone())?;
+            let index = eval_expression(*index_exp.index, env)?;
+            match (object, index) {
+                (Object::Array(array), Object::Integer(idx)) => {
+                    let idx = idx as usize;
+                    if idx < array.len() {
+                        Ok(array[idx].clone())
+                    } else {
+                        Err(EvalError::IndexOutOfBounds { index: idx as i64, size: array.len() })
+                    }
+                },
+                (obj, idx) => Err(EvalError::RuntimeError {
+                    message: format!("Cannot index object of type {} with index of type {}", obj.type_str(), idx.type_str()),
+                }),
+            }
+        },
+        Expression::Assignment(assign_exp) => {
+            let value = eval_expression(*assign_exp.value, env.clone())?;
+            if env.borrow_mut().set(&assign_exp.name.value, value.clone()).is_some() {
+                Ok(value)
+            } else {
+                Err(EvalError::IdentifierNotFound {
+                    name: assign_exp.name.value,
+                })
+            }
         }
     }
 }
@@ -474,6 +552,8 @@ fn eval_bang_operator_expression(right: Object) -> Object {
 fn eval_minus_operator_expression(right: Object) -> Result<Object, EvalError> {
     if let Object::Integer(value) = right {
         Ok(Object::Integer(-value))
+    } else if let Object::Float(value) = right {
+        Ok(Object::Float(-value))
     } else {
         Err(EvalError::UnknownPrefixOperator {
             op_kind: TokenKind::Minus,
@@ -487,12 +567,21 @@ fn eval_infix_expression(
     left: Object,
     right: Object,
 ) -> Result<Object, EvalError> {
-    match (left, right) {
+    match (&left, &right) {
         (Object::Integer(l_val), Object::Integer(r_val)) => {
-            eval_integer_infix_expression(operator, l_val, r_val)
+            eval_integer_infix_expression(operator, *l_val, *r_val)
+        }
+        (Object::Float(l_val), Object::Float(r_val)) => {
+            eval_float_infix_expression(operator, *l_val, *r_val)
+        }
+        (Object::Integer(l_val), Object::Float(r_val)) => {
+            eval_float_infix_expression(operator, *l_val as f64, *r_val)
+        }
+        (Object::Float(l_val), Object::Integer(r_val)) => {
+            eval_float_infix_expression(operator, *l_val, *r_val as f64)
         }
         (Object::Boolean(l_val), Object::Boolean(r_val)) => {
-            eval_boolean_infix_expression(operator, l_val, r_val)
+            eval_boolean_infix_expression(operator, *l_val, *r_val)
         }
         (Object::String(l_val), Object::String(r_val)) => {
             if operator.kind == TokenKind::Plus {
@@ -500,8 +589,52 @@ fn eval_infix_expression(
             } else {
                 Err(EvalError::UnknownInfixOperator {
                     op_kind: operator.kind,
-                    left_type: l_val,
-                    right_type: r_val,
+                    left_type: l_val.clone(),
+                    right_type: r_val.clone(),
+                })
+            }
+        }
+        (Object::String(l_val), Object::Integer(r_val)) => {
+            if operator.kind == TokenKind::Plus {
+                Ok(Object::String(format!("{}{}", l_val, r_val)))
+            } else {
+                Err(EvalError::UnknownInfixOperator {
+                    op_kind: operator.kind,
+                    left_type: l_val.clone(),
+                    right_type: r_val.to_string(),
+                })
+            }
+        }
+        (Object::Integer(l_val), Object::String(r_val)) => {
+            if operator.kind == TokenKind::Plus {
+                Ok(Object::String(format!("{}{}", l_val, r_val)))
+            } else {
+                Err(EvalError::UnknownInfixOperator {
+                    op_kind: operator.kind,
+                    left_type: l_val.to_string(),
+                    right_type: r_val.clone(),
+                })
+            }
+        }
+        (Object::String(l_val), Object::Float(r_val)) => {
+            if operator.kind == TokenKind::Plus {
+                Ok(Object::String(format!("{}{}", l_val, r_val)))
+            } else {
+                Err(EvalError::UnknownInfixOperator {
+                    op_kind: operator.kind,
+                    left_type: l_val.clone(),
+                    right_type: r_val.to_string(),
+                })
+            }
+        }
+        (Object::Float(l_val), Object::String(r_val)) => {
+            if operator.kind == TokenKind::Plus {
+                Ok(Object::String(format!("{}{}", l_val, r_val)))
+            } else {
+                Err(EvalError::UnknownInfixOperator {
+                    op_kind: operator.kind,
+                    left_type: l_val.to_string(),
+                    right_type: r_val.clone(),
                 })
             }
         }
@@ -518,6 +651,30 @@ fn eval_infix_expression(
     }
 }
 
+fn eval_float_infix_expression(
+    operator: crate::token::Token,
+    left: f64,
+    right: f64,
+) -> Result<Object, EvalError> {
+    match operator.kind {
+        TokenKind::Plus => Ok(Object::Float(left + right)),
+        TokenKind::Minus => Ok(Object::Float(left - right)),
+        TokenKind::Asterisk => Ok(Object::Float(left * right)),
+        TokenKind::Slash => Ok(Object::Float(left / right)),
+        TokenKind::Lt => Ok(native_bool_to_boolean_object(left < right)),
+        TokenKind::Gt => Ok(native_bool_to_boolean_object(left > right)),
+        TokenKind::GtEq => Ok(native_bool_to_boolean_object(left >= right)),
+        TokenKind::LtEq => Ok(native_bool_to_boolean_object(left <= right)),
+        TokenKind::Eq => Ok(native_bool_to_boolean_object(left == right)),
+        TokenKind::NotEq => Ok(native_bool_to_boolean_object(left != right)),
+        _ => Err(EvalError::UnknownInfixOperator {
+            op_kind: operator.kind,
+            left_type: Object::Float(left).type_str().to_string(),
+            right_type: Object::Float(right).type_str().to_string(),
+        }),
+    }
+}
+
 fn eval_integer_infix_expression(
     operator: crate::token::Token,
     left: i64,
@@ -530,6 +687,8 @@ fn eval_integer_infix_expression(
         TokenKind::Slash => Ok(Object::Integer(left / right)),
         TokenKind::Lt => Ok(native_bool_to_boolean_object(left < right)),
         TokenKind::Gt => Ok(native_bool_to_boolean_object(left > right)),
+        TokenKind::GtEq => Ok(native_bool_to_boolean_object(left >= right)),
+        TokenKind::LtEq => Ok(native_bool_to_boolean_object(left <= right)),
         TokenKind::Eq => Ok(native_bool_to_boolean_object(left == right)),
         TokenKind::NotEq => Ok(native_bool_to_boolean_object(left != right)),
         _ => Err(EvalError::UnknownInfixOperator {
@@ -583,7 +742,7 @@ fn apply_function(func: Object, args: Vec<Object>) -> Result<Object, EvalError> 
                 function.env.clone(),
             )));
             for (param_ident, arg_obj) in function.parameters.into_iter().zip(args.into_iter()) {
-                extended_env.borrow_mut().set(param_ident.value, arg_obj);
+                extended_env.borrow_mut().define(param_ident.value, arg_obj);
             }
             let evaluated = eval_block_statement(function.body, extended_env.clone())?;
             Ok(unwrap_return_value(evaluated))

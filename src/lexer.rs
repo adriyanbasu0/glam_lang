@@ -108,6 +108,8 @@ impl Lexer {
             ')' => (TokenKind::RParen, ")".to_string()),
             '{' => (TokenKind::LBrace, "{".to_string()),
             '}' => (TokenKind::RBrace, "}".to_string()),
+            '[' => (TokenKind::LBracket, "[".to_string()),
+            ']' => (TokenKind::RBracket, "]".to_string()),
             ':' => (TokenKind::Colon, ":".to_string()),
             '.' => (TokenKind::Dot, ".".to_string()),
             '"' => {
@@ -132,12 +134,14 @@ impl Lexer {
                         "null" => TokenKind::Null,
                         "print" => TokenKind::Print,
                         "struct" => TokenKind::Struct,
+                        "for" => TokenKind::For,
+                        "in" => TokenKind::In,
                         _ => TokenKind::Identifier, // Treat as an identifier
                     };
                     return Ok(Token::new(kind, literal, current_token_start_pos, self.position - current_token_start_pos));
                 } else if is_digit(self.ch) {
-                    let literal = self.read_number();
-                    return Ok(Token::new(TokenKind::Int, literal, current_token_start_pos, self.position - current_token_start_pos));
+                    let (literal, kind) = self.read_number();
+                    return Ok(Token::new(kind, literal, current_token_start_pos, self.position - current_token_start_pos));
                 } else {
                     return Err(LexerError::IllegalCharacter {
                         found: self.ch,
@@ -159,12 +163,20 @@ impl Lexer {
         self.input[position..self.position].to_string()
     }
 
-    fn read_number(&mut self) -> String {
+    fn read_number(&mut self) -> (String, TokenKind) {
         let position = self.position;
+        let mut kind = TokenKind::Int;
         while is_digit(self.ch) {
             self.read_char();
         }
-        self.input[position..self.position].to_string()
+        if self.ch == '.' && is_digit(self.peek_char()) {
+            kind = TokenKind::Float;
+            self.read_char();
+            while is_digit(self.ch) {
+                self.read_char();
+            }
+        }
+        (self.input[position..self.position].to_string(), kind)
     }
 
     fn read_string_literal(&mut self) -> Result<(String, TokenKind), LexerError> {

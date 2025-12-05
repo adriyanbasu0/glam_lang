@@ -10,6 +10,7 @@ extern {
 
     enum Token {
         Int => Token { kind: TokenKind::Int, .. },
+        Float => Token { kind: TokenKind::Float, .. },
         String => Token { kind: TokenKind::String, .. },
         Let => Token { kind: TokenKind::Let, .. },
         Print => Token { kind: TokenKind::Print, .. },
@@ -22,6 +23,8 @@ extern {
         Fn => Token { kind: TokenKind::Fn, .. },
         Return => Token { kind: TokenKind::Return, .. },
         Struct => Token { kind: TokenKind::Struct, .. },
+        For => Token { kind: TokenKind::For, .. },
+        In => Token { kind: TokenKind::In, .. },
         LBrace => Token { kind: TokenKind::LBrace, .. },
         RBrace => Token { kind: TokenKind::RBrace, .. },
         Bang => Token { kind: TokenKind::Bang, .. },
@@ -38,8 +41,12 @@ extern {
         Gt => Token { kind: TokenKind::Gt, .. },
         Eq => Token { kind: TokenKind::Eq, .. },
         NotEq => Token { kind: TokenKind::NotEq, .. },
+        GtEq => Token { kind: TokenKind::GtEq, .. },
+        LtEq => Token { kind: TokenKind::LtEq, .. },
         LParen => Token { kind: TokenKind::LParen, .. },
         RParen => Token { kind: TokenKind::RParen, .. },
+        LBracket => Token { kind: TokenKind::LBracket, .. },
+        RBracket => Token { kind: TokenKind::RBracket, .. },
         Error => Token { kind: TokenKind::Error, .. },
     }
 }
@@ -54,7 +61,18 @@ Statement: ast::Statement = {
     ReturnStatement,
     PrintStatement,
     IfStatement,
+    ForStatement,
     ExpressionStatement,
+};
+
+ForStatement: ast::Statement = {
+    For LParen <iterator_var:Ident> In <iterable:Expression> RParen <body:BlockStatement> => {
+        ast::Statement::For(ast::ForStatement {
+            iterator_var: iterator_var,
+            iterable: iterable,
+            body: body,
+        })
+    }
 };
 
 IfStatement: ast::Statement = {
@@ -90,6 +108,16 @@ BlockStatement: ast::BlockStatement = {
 };
 
 pub Expression: ast::Expression = {
+    Assignment,
+};
+
+Assignment: ast::Expression = {
+    <name:Ident> Assign <value:Expression> => {
+        ast::Expression::Assignment(ast::AssignmentExpression {
+            name: name,
+            value: Box::new(value),
+        })
+    },
     Comparison,
 };
 
@@ -107,6 +135,8 @@ CompOp: Token = {
     Lt => <>,
     Eq => <>,
     NotEq => <>,
+    GtEq => <>,
+    LtEq => <>,
 };
 
 Sum: ast::Expression = {
@@ -157,6 +187,14 @@ Call: ast::Expression = {
             arguments: args,
         })
     },
+    Index,
+};
+
+Index: ast::Expression = {
+    <object:Index> LBracket <index:Expression> RBracket => ast::Expression::IndexExpression(ast::IndexExpression {
+        object: Box::new(object),
+        index: Box::new(index),
+    }),
     AccessExpressionChain,
 };
 
@@ -170,12 +208,23 @@ AccessExpressionChain: ast::Expression = {
 
 AtomicExpression: ast::Expression = {
     Term,
+    ArrayLiteral,
+};
+
+ArrayLiteral: ast::Expression = {
+    LBracket <elements:CommaList<Expression>> RBracket => ast::Expression::ArrayLiteral(ast::ArrayLiteral {
+        elements: elements
+    }),
 };
 
 Term: ast::Expression = {
     <token:Int> => {
         let value = token.literal.parse::<i64>().unwrap();
         ast::Expression::IntLiteral(ast::IntLiteral { value })
+    },
+    <token:Float> => {
+        let value = token.literal.parse::<f64>().unwrap();
+        ast::Expression::FloatLiteral(ast::FloatLiteral { value })
     },
     <token:String> => {
         ast::Expression::StringLiteral(ast::StringLiteral { value: token.literal.clone() })
@@ -217,7 +266,20 @@ StructInstanceField: (ast::Identifier, ast::Expression) = {
 };
 
 ElseClause: ast::BlockStatement = {
-    Else <b:BlockStatement> => b
+    Else <next_if:IfContinuation> => next_if,
+};
+
+IfContinuation: ast::BlockStatement = {
+    If LParen <cond:Expression> RParen <consequence:BlockStatement> <alternative:ElseClause?> => {
+        let if_expr = ast::Expression::If(ast::IfExpression {
+            condition: Box::new(cond),
+            consequence: consequence,
+            alternative: alternative,
+        });
+        let stmt = ast::Statement::Expression(ast::ExpressionStatement { expression: if_expr });
+        ast::BlockStatement { statements: vec![stmt] }
+    },
+    <block:BlockStatement> => block,
 };
 
 CommaList<T>: Vec<T> = {

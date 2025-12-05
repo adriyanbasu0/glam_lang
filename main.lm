@@ -1,81 +1,133 @@
-// main.ox
-// An example program in Ox Lang
+// main.lm
+// A program showcasing the features of Glam Lang
 
-// Declare a variable
-let greeting = "Hello, Ox Lang!";
-print greeting;
+// --- Welcome Message ---
+print "--- Welcome to the Glam Lang Showcase! ---";
+print "";
 
-// Demonstrate immutability: create a new variable for the "updated" value
-let count_initial = 10;
-print "Initial count: ";
-print count_initial;
+// --- Basic Data Types and Variables ---
+print "--- 1. Basic Data Types and Variables ---";
+let language_name = "Glam Lang";
+let version = 0.1;
+let is_awesome = true;
+let creator = null;
 
-let count_updated = count_initial + 5; // New variable for the updated value
-print "Updated count: ";
-print count_updated;
+print "Language Name:";
+print language_name;
+print "Version:";
+print version;
+print "Is it awesome?";
+print is_awesome;
+print "Creator:";
+print creator;
+print "";
 
-// Function definition
-let add = fn(a, b) {
-    return a + b;
+// --- Arithmetic and Expressions ---
+print "--- 2. Arithmetic and Expressions ---";
+let a = 10;
+let b = 5;
+print "a = 10, b = 5";
+print "a + b =";
+print a + b;
+print "a * (b - 2) =";
+print a * (b - 2);
+print "";
+
+// --- Functions ---
+print "--- 3. Functions ---";
+let greet = fn(name) {
+    return "Hello, " + name + "!";
 };
 
-// Call the function
-let sum = add(10, 20);
-print "Sum of 10 and 20: ";
-print sum;
+let message = greet("World");
+print "Calling greet('World'):";
+print message;
+print "";
 
-// Conditional statement
-let number = 15;
-if (number > 10) {
-    print "Number is greater than 10";
+// --- Conditional Logic ---
+print "--- 4. Conditional Logic (if-else) ---";
+let score = 85;
+print "Score is 85. Checking grade:";
+if (score >= 90) {
+    print "Grade: A";
+} else if (score >= 80) {
+    print "Grade: B";
 } else {
-    print "Number is not greater than 10";
+    print "Grade: C or lower";
+}
+print "";
+
+// --- Structs ---
+print "--- 5. Structs ---";
+struct Language {
+    name: string,
+    version: float
 }
 
-// More complex expression
-let result = (5 * (2 + 3)) - 10;
-print "Result of (5 * (2 + 3)) - 10: ";
-print result;
+let glam = Language { name: "Glam Lang", version: 0.1 };
+print "Created a Language struct instance:";
+print glam;
+print "Accessing struct fields:";
+print "glam.name:";
+print glam.name;
+print "glam.version:";
+print glam.version;
+print "";
 
-// Using boolean values
-let is_ox_cool = true;
-if (is_ox_cool) {
-    print "Ox Lang is cool!";
-} else {
-    print "Ox Lang is not cool. (This should not print!)";
+// --- Arrays ---
+print "--- 6. Arrays ---";
+let features = ["variables", "functions", "structs", "arrays", "for-in loops"];
+print "An array of Glam Lang features:";
+print features;
+print "Accessing the second feature (features[1]):";
+print features[1];
+print "";
+
+// --- For-in Loops ---
+print "--- 7. For-in Loops ---";
+print "Iterating through the features array:";
+for (feature in features) {
+    print "- " + feature;
+}
+print "";
+
+// --- A More Complex Example: Combining Features ---
+print "--- 8. A More Complex Example ---";
+struct Contributor {
+    name: string,
+    commits: int
 }
 
-// Null value
-let empty_var = null;
-print "Value of empty_var: ";
-print empty_var; // Should print 'null' or equivalent
+let contributors = [
+    Contributor { name: "Alice", commits: 15 },
+    Contributor { name: "Bob", commits: 25 },
+    Contributor { name: "Charlie", commits: 10 }
+];
 
-// Another function with if-else
-let factorial = fn(n) {
-    if (n == 0) {
-        return 1;
-    } else {
-        return n * factorial(n - 1);
+let find_top_contributor = fn(contribs) {
+    let top_contributor = null;
+    let max_commits = -1;
+
+    for (c in contribs) {
+        if (c.commits > max_commits) {
+            max_commits = c.commits;
+            top_contributor = c;
+        }
     }
+
+    return top_contributor;
 };
 
-let fact_5 = factorial(5);
-print "Factorial of 5: ";
-print fact_5; // Should print 120
-
-// Struct definition
-struct Point {
-    x: int,
-    y: int
+print "List of contributors:";
+for (c in contributors) {
+    print c.name + " (" + c.commits + " commits)";
 }
-print "Defined struct Point: ";
-print Point;
 
-// Struct instantiation and field access
-let p = Point { x: 10, y: 20 };
-print "Instantiated Point: ";
-print p;
-print "p.x: ";
-print p.x;
-print "p.y: ";
-print p.y;
+let top = find_top_contributor(contributors);
+print "";
+print "Finding the top contributor:";
+print "Top contributor is: " + top.name;
+print "";
+
+// --- End of Showcase ---
+print "--- End of Glam Lang Showcase ---";
